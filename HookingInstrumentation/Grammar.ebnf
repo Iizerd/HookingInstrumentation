@@ -1,0 +1,45 @@
+
+
+<Integer> -> ["-"] <Digit> {<Digit>}
+<HexInteger> -> "0x" <Digit> {<Digit>}
+<Number> -> <HexInteger> | <Integer>
+
+<Name> -> <Letter> {<Letter> | <Digit>}
+
+// Parse NT to load.
+// A type.. U32, ULONG, ULONG64, DWORD, etc...
+<NtType> -> ...
+// All exported functions from ntoskrnl and hal. ExAllocatePoolWithTag, MmMapIoSpace, etc...
+<NtFunction> -> ...
+
+
+// Intrinsic operations to make parsing easier than C syntax.
+// Dereference a <NtType> at ((PUCHAR)<Exp1> + <Expr2>)
+<PVoidDeref> -> "PVOID_DEREF(" <NtType> "," <Expression> "," "<Expression> ")"
+// Dereference a <NtType> at ((<NtType>*)<Exp1> + <Expr2>)
+<ArrayDeref> -> "ARRAY_DEREF(" <NtType> "," <Expression> "," "<Expression> ")"
+<Intrinsic> -> <PVoidDeref> | <ArrayDeref>
+
+
+<Factor> -> <Intrinsic> | <NtFunction> | <Name> | <Number> | "(" <Expression> ")"
+<Term> -> <Factor> {("*" | "/") <Factor>};
+<Expression> -> _ | <Term> {("+" | "-") <Term>};
+
+// An Arg that is required to match what was passed to the call
+<ConstraintArg> -> "[" <Expression> "]"
+
+<FunctionArg> -> <ConstraintArg> | <Expression>
+
+<Hook> -> <Identifier> "(" [<Variable> {"," <Variable>}] ")"
+<NtCall> -> <Expression> "=" <NtFunction> "(" [<FunctionArg> {"," <FunctionArg>}] ")"
+<ChainElement> -> <NtCall> | <Condition>
+<ConditionChain> -> "(" <ChainElement> {"," <ChainElement>} ")->" <Hook> ";"
+
+Examples: https://i.imgur.com/dwjO5KF.png
+	(
+		ReportHeader=ExAllocatePool([PagedPool], [0x18]),
+		ReportBuffer=ExAllocatePool([PagedPool], ReportBufferSize),
+		_=KeWaitForSingleObject(_, [Executive], [0], [0], [0]),
+		_=KeReleaseMutex(_, [0])
+	)->HookReportPackedAdded(ReportHeader, ReportBuffer, ReportBufferSize);
+
